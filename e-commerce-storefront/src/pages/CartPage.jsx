@@ -29,6 +29,9 @@ export default function CartPage() {
                 <ProductImage src={item.product.image_url} alt={item.product.name} className="!aspect-square" />
                 <div>
                   <h3 className="font-semibold">{item.product.name}</h3>
+                  {item.variant_color && (
+                    <p className="mt-1 text-xs text-muted-foreground">Color: {item.variant_color}</p>
+                  )}
                   <p className="mt-1 text-sm text-muted-foreground">{money(item.product.price)} each</p>
                   <div className="mt-4 flex items-center gap-3">
                     <button

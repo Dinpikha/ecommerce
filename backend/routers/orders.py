@@ -82,6 +82,7 @@ def checkout(
                 unit_price=item.product.price,     # snapshot at time of purchase
                 quantity=item.quantity,
                 line_total=line_total,
+                variant_color=item.variant_color or None,
             )
         )
         item.product.stock -= item.quantity  # decrement stock

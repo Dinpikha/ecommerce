@@ -4,9 +4,9 @@ import { cartService } from '../services/cartService'
 export function useCartActions() {
   const { user, setCart } = useAuth()
 
-  const addToCart = async (product, quantity = 1) => {
+  const addToCart = async (product, quantity = 1, variantColor = '') => {
     if (!user || !product?.id || product.stock === 0) return
-    const updated = await cartService.add(product.id, quantity)
+    const updated = await cartService.add(product.id, quantity, variantColor)
     setCart(updated)
     return updated
   }

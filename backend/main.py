@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from database import Base, engine
+from database import Base, engine, apply_schema_updates
 import models  # noqa: F401  -- import ensures all models are registered with Base
 from routers import auth as auth_router
 from routers import products as products_router
@@ -21,6 +21,7 @@ from routers import orders as orders_router
 # Creates tables that don't exist yet. Fine for a timed student project;
 # a real production app would use Alembic migrations instead.
 Base.metadata.create_all(bind=engine)
+apply_schema_updates()
 
 app = FastAPI(
     title="E-Commerce API",

@@ -55,12 +55,15 @@ class Product(Base):
 
 class CartItem(Base):
     __tablename__ = "cart_items"
-    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_cart_user_product"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", "variant_color", name="uq_cart_user_product_variant"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    variant_color: Mapped[str] = mapped_column(String(50), nullable=False, default="")
 
     user: Mapped["User"] = relationship(back_populates="cart_items")
     product: Mapped["Product"] = relationship()
@@ -121,6 +124,7 @@ class OrderItem(Base):
     unit_price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     line_total: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    variant_color: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
     product: Mapped["Product | None"] = relationship()

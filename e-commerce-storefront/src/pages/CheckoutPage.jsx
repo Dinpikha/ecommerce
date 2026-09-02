@@ -1,7 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { orderService } from '../services/orderService'
+import { formatApiError } from '../utils/apiErrors'
+import {
+  isCheckoutFormValid,
+  trimCheckoutForm,
+  validateCheckoutForm,
+} from '../utils/checkoutValidation'
 import { money } from '../utils/format'
 
 const PAYMENT_METHODS = [
@@ -11,14 +17,49 @@ const PAYMENT_METHODS = [
   { label: 'Wallet', value: 'WALLET' },
 ]
 
+const SHIPPING_FIELDS = [
+  { name: 'customer_name', label: 'Full name', placeholder: 'Full name', type: 'text' },
+  { name: 'email', label: 'Email', placeholder: 'Email address', type: 'email' },
+  { name: 'phone', label: 'Phone', placeholder: 'Phone number', type: 'tel' },
+  { name: 'address_line', label: 'Address', placeholder: 'Street address', type: 'text' },
+  { name: 'city', label: 'City', placeholder: 'City', type: 'text', grid: 'city' },
+  { name: 'state', label: 'State', placeholder: 'State', type: 'text', grid: 'state' },
+  { name: 'pincode', label: 'Postal code', placeholder: 'Postal code', type: 'text', grid: 'pincode' },
+]
+
+function Field({ field, value, error, touched, onChange, onBlur }) {
+  return (
+    <div className={field.grid ? '' : 'w-full'}>
+      <label htmlFor={field.name} className="mb-1.5 block text-sm font-medium">
+        {field.label}
+      </label>
+      <input
+        id={field.name}
+        name={field.name}
+        type={field.type}
+        value={value}
+        onChange={(e) => onChange(field.name, e.target.value)}
+        onBlur={() => onBlur(field.name)}
+        placeholder={field.placeholder}
+        className={`w-full rounded-xl border bg-background px-4 py-3 ${
+          touched && error ? 'border-destructive' : 'border-border'
+        }`}
+      />
+      {touched && error && <p className="mt-1.5 text-sm text-destructive">{error}</p>}
+    </div>
+  )
+}
+
 export default function CheckoutPage() {
   const navigate = useNavigate()
   const { user, cart, refreshCart } = useAuth()
   const [step, setStep] = useState(1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [touched, setTouched] = useState({})
   const [form, setForm] = useState({
     customer_name: user?.name || '',
+    email: user?.email || '',
     phone: '',
     address_line: '',
     city: '',
@@ -27,19 +68,67 @@ export default function CheckoutPage() {
     payment_method: 'CARD',
   })
 
-  const updateField = (name, value) => setForm((prev) => ({ ...prev, [name]: value }))
+  const errors = useMemo(() => validateCheckoutForm(form), [form])
+  const shippingValid = useMemo(() => {
+    const shippingErrors = validateCheckoutForm(form)
+    return isCheckoutFormValid(shippingErrors)
+  }, [form])
+
+  const updateField = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }))
+    if (error) setError('')
+  }
+
+  const markTouched = (name) => setTouched((prev) => ({ ...prev, [name]: true }))
+
+  const touchAllShippingFields = () => {
+    const next = {}
+    SHIPPING_FIELDS.forEach((field) => {
+      next[field.name] = true
+    })
+    setTouched((prev) => ({ ...prev, ...next }))
+  }
+
+  const continueToPayment = () => {
+    touchAllShippingFields()
+    if (!shippingValid) return
+    setStep(2)
+  }
 
   const submitOrder = async () => {
+    touchAllShippingFields()
+    const trimmed = trimCheckoutForm(form)
+    const validationErrors = validateCheckoutForm(trimmed)
+    if (!isCheckoutFormValid(validationErrors)) return
+
     setError('')
     setLoading(true)
+
+    const checkoutPayload = {
+      customer_name: trimmed.customer_name,
+      phone: trimmed.phone,
+      address_line: trimmed.address_line,
+      city: trimmed.city,
+      state: trimmed.state,
+      pincode: trimmed.pincode,
+      payment_method: trimmed.payment_method,
+    }
+
     try {
-      const order = await orderService.checkout(form)
-      const orderId = order.id
-      await refreshCart()
-      navigate(`/orders/${orderId}/success`, { state: { order } })
+      const order = await orderService.checkout(checkoutPayload)
+
+      try {
+        await refreshCart()
+      } catch (cartError) {
+        console.error('Cart refresh failed after successful checkout:', cartError)
+      }
+
+      navigate(`/orders/${order.id}/success`, {
+        state: { order, email: trimmed.email },
+      })
     } catch (err) {
-      const detail = err.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'Checkout failed.')
+      console.error('Checkout failed:', err?.response?.data || err)
+      setError(formatApiError(err, 'We could not place your order. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -67,47 +156,38 @@ export default function CheckoutPage() {
         {step === 1 && (
           <div className="mt-6 space-y-4">
             <h2 className="font-serif text-2xl">Shipping details</h2>
-            <input
-              value={form.customer_name}
-              onChange={(e) => updateField('customer_name', e.target.value)}
-              placeholder="Full name"
-              className="w-full rounded-xl border border-border bg-background px-4 py-3"
-            />
-            <input
-              value={form.phone}
-              onChange={(e) => updateField('phone', e.target.value)}
-              placeholder="Phone"
-              className="w-full rounded-xl border border-border bg-background px-4 py-3"
-            />
-            <input
-              value={form.address_line}
-              onChange={(e) => updateField('address_line', e.target.value)}
-              placeholder="Address"
-              className="w-full rounded-xl border border-border bg-background px-4 py-3"
-            />
+
+            {SHIPPING_FIELDS.filter((field) => !field.grid).map((field) => (
+              <Field
+                key={field.name}
+                field={field}
+                value={form[field.name]}
+                error={errors[field.name]}
+                touched={touched[field.name]}
+                onChange={updateField}
+                onBlur={markTouched}
+              />
+            ))}
+
             <div className="grid gap-4 sm:grid-cols-3">
-              <input
-                value={form.city}
-                onChange={(e) => updateField('city', e.target.value)}
-                placeholder="City"
-                className="rounded-xl border border-border bg-background px-4 py-3"
-              />
-              <input
-                value={form.state}
-                onChange={(e) => updateField('state', e.target.value)}
-                placeholder="State"
-                className="rounded-xl border border-border bg-background px-4 py-3"
-              />
-              <input
-                value={form.pincode}
-                onChange={(e) => updateField('pincode', e.target.value)}
-                placeholder="Pincode"
-                className="rounded-xl border border-border bg-background px-4 py-3"
-              />
+              {SHIPPING_FIELDS.filter((field) => field.grid).map((field) => (
+                <Field
+                  key={field.name}
+                  field={field}
+                  value={form[field.name]}
+                  error={errors[field.name]}
+                  touched={touched[field.name]}
+                  onChange={updateField}
+                  onBlur={markTouched}
+                />
+              ))}
             </div>
+
             <button
-              className="rounded-full bg-primary px-5 py-3 text-primary-foreground"
-              onClick={() => setStep(2)}
+              type="button"
+              disabled={!shippingValid}
+              className="rounded-full bg-primary px-5 py-3 text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={continueToPayment}
             >
               Continue to payment
             </button>
@@ -135,12 +215,17 @@ export default function CheckoutPage() {
               No real payment details are collected. The backend records your chosen method only.
             </p>
             <div className="flex gap-3">
-              <button className="rounded-full border border-border px-5 py-3" onClick={() => setStep(1)}>
+              <button
+                type="button"
+                className="rounded-full border border-border px-5 py-3"
+                onClick={() => setStep(1)}
+              >
                 Back
               </button>
               <button
-                disabled={loading}
-                className="rounded-full bg-primary px-5 py-3 text-primary-foreground disabled:opacity-50"
+                type="button"
+                disabled={loading || !shippingValid}
+                className="rounded-full bg-primary px-5 py-3 text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={submitOrder}
               >
                 {loading ? 'Placing order...' : 'Place order'}

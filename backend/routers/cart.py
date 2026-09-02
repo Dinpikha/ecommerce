@@ -28,7 +28,13 @@ def _build_cart_out(db: Session, user_id: int) -> CartOut:
         subtotal += line_total
         total_items += item.quantity
         item_outs.append(
-            CartItemOut(id=item.id, product=item.product, quantity=item.quantity, line_total=line_total)
+            CartItemOut(
+                id=item.id,
+                product=item.product,
+                quantity=item.quantity,
+                line_total=line_total,
+                variant_color=item.variant_color or "",
+            )
         )
 
     return CartOut(items=item_outs, subtotal=subtotal, total_items=total_items)
@@ -49,9 +55,15 @@ def add_to_cart(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
+    variant_color = (payload.variant_color or "").strip()
+
     existing = (
         db.query(CartItem)
-        .filter(CartItem.user_id == current_user.id, CartItem.product_id == payload.product_id)
+        .filter(
+            CartItem.user_id == current_user.id,
+            CartItem.product_id == payload.product_id,
+            CartItem.variant_color == variant_color,
+        )
         .first()
     )
 
@@ -59,7 +71,14 @@ def add_to_cart(
         # already in cart -> increase quantity instead of creating a duplicate row
         existing.quantity += payload.quantity
     else:
-        db.add(CartItem(user_id=current_user.id, product_id=payload.product_id, quantity=payload.quantity))
+        db.add(
+            CartItem(
+                user_id=current_user.id,
+                product_id=payload.product_id,
+                quantity=payload.quantity,
+                variant_color=variant_color,
+            )
+        )
 
     db.commit()
     return _build_cart_out(db, current_user.id)

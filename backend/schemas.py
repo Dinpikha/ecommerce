@@ -74,6 +74,7 @@ class ProductListOut(BaseModel):
 class CartItemCreate(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
+    variant_color: str = Field(default="", max_length=50)
 
 
 class CartItemUpdate(BaseModel):
@@ -87,6 +88,7 @@ class CartItemOut(BaseModel):
     product: ProductOut
     quantity: int
     line_total: Decimal
+    variant_color: str = ""
 
 
 class CartOut(BaseModel):
@@ -136,6 +138,7 @@ class OrderItemOut(BaseModel):
     unit_price: Decimal
     quantity: int
     line_total: Decimal
+    variant_color: str | None = None
 
 
 class OrderOut(BaseModel):
